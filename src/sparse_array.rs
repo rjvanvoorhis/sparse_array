@@ -96,8 +96,9 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
     /// assert_eq!(from_dense, from_sparse);
     /// assert_eq!(sparse.get_at_index(1), None);
     /// ```
-    pub fn from_dense<I>(values: I) -> Self 
-        where I: IntoIterator<Item=Option<T>> + ExactSizeIterator
+    pub fn from_dense<I>(values: I) -> Self
+    where
+        I: IntoIterator<Item = Option<T>> + ExactSizeIterator,
     {
         let mut builder = Self::create(values.len() as u64);
         values.into_iter().enumerate().for_each(|(pos, value)| {

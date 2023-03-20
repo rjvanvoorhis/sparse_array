@@ -1,5 +1,5 @@
 use crate::{
-    math::{ceil_div, div_with_remainder, log2_ceil},
+    math::{ceil_div, div_with_remainder, log2_ceil, popcount},
     serial::{from_bytes, into_bytes, to_bytes},
 };
 use eyre::{Context, Result};
@@ -100,7 +100,9 @@ impl RankSupport {
             }
             block_cumulative_ranks.push(cumulative_rank - previous_cumulative_rank);
             let block_len = min(block_size, n - position as u64) as usize;
-            cumulative_rank += store.get_bits(position, block_len).count_ones() as usize;
+            cumulative_rank +=
+                unsafe { popcount(store.get_bits(position, block_len) as u64) } as usize;
+            // cumulative_rank += store.get_bits(position, block_len).count_ones() as usize;
             position += block_len;
         }
 
@@ -128,12 +130,15 @@ impl RankSupport {
     pub fn rank1(&self, elem: u64) -> u64 {
         let superblock_position = (elem / self.s as u64) as usize;
         let (block_position, offset) = div_with_remainder(elem, self.b as u64);
+        let final_bits = unsafe {
+            popcount(
+                self.store
+                    .get_bits((elem - offset) as usize, offset as usize) as u64,
+            )
+        } as usize;
         (self.superblocks.get(superblock_position)
             + self.blocks.get(block_position as usize)
-            + self
-                .store
-                .get_bits((elem - offset) as usize, offset as usize)
-                .count_ones() as usize) as u64
+            + final_bits) as u64
     }
 
     pub fn rank0(&self, elem: u64) -> u64 {
@@ -151,12 +156,6 @@ impl RankSupport {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         Ok(bincode::deserialize(bytes).wrap_err("Failed to deserialize rank_support")?)
-    }
-
-    pub fn theoretical_overhead(&self) -> u64 {
-        ((self.blocks.width() * self.blocks.len())
-            + (self.superblocks.width() * self.superblocks.len())) as u64
-            / 8
     }
 
     pub fn overhead(&self) -> u64 {
@@ -180,9 +179,7 @@ impl RankSupport {
         let result: RankSupport = bincode::deserialize_from(reader)?;
         Ok(result)
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -198,8 +195,6 @@ mod tests {
             assert_eq!(0, rs.rank0(i));
         }
     }
-
-
 
     #[test]
     fn test_rank1() {

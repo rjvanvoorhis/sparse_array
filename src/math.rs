@@ -11,3 +11,10 @@ pub fn div_with_remainder(a: u64, b: u64) -> (u64, u64) {
     let rem = a % b;
     (div, rem)
 }
+
+// https://eugene-babichenko.github.io/blog/2019/11/13/rust-popcount-intrinsics/
+#[inline(never)]
+#[cfg_attr(target_arch = "x86_64", target_feature(enable = "popcnt"))]
+pub unsafe fn popcount(x: u64) -> u32 {
+    x.count_ones()
+}

@@ -32,6 +32,10 @@ impl SelectSupport {
         })
     }
 
+    pub fn overhead(&self) -> u64 {
+        return self.rank_support.overhead();
+    }
+
     pub fn save(&self, fname: &str) -> Result<()> {
         self.rank_support.save(fname)?;
         Ok(())
