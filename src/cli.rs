@@ -87,13 +87,15 @@ pub struct RankSupportArgs {
 }
 
 #[derive(Parser, Debug, Clone, Serialize)]
-pub struct SparseArrayCli {
+pub struct SparseArrayArgs {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: SparseArrayCommands,
+
+    pub outfile: PathBuf,
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize)]
-pub enum Commands {
+pub enum SparseArrayCommands {
     Sparsity(VarySparsityArgs),
     Length(VaryLengthArgs),
 }
@@ -103,8 +105,7 @@ pub struct VarySparsityArgs {
     #[arg(value_enum)]
     pub query_mode: SparseQueryMode,
 
-    pub outfile: PathBuf,
-
+    // pub outfile: PathBuf,
     #[arg(long, default_value = "100000")]
     pub length: u64,
     #[arg(long, default_value="0", value_parser = clap::value_parser!(u8).range(0..=100))]
@@ -122,8 +123,7 @@ pub struct VaryLengthArgs {
     #[arg(value_enum)]
     pub query_mode: SparseQueryMode,
 
-    pub outfile: PathBuf,
-
+    // pub outfile: PathBuf,
     #[arg(long, default_value="15", value_parser = clap::value_parser!(u8).range(0..=100))]
     pub sparsity: u8,
     #[arg(long, default_value = "1000")]

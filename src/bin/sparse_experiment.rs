@@ -4,7 +4,7 @@ use eyre::Result;
 use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, SeedableRng};
 use serde::Serialize;
 use sparse_array::{
-    cli::{Commands, SparseArrayCli, SparseQueryMode},
+    cli::{SparseArrayArgs, SparseArrayCommands, SparseQueryMode},
     experiment::{Experiment, ExperimentRun},
     sparse_array::SparseArray,
 };
@@ -14,36 +14,33 @@ use clap::Parser;
 #[derive(Serialize)]
 pub struct ExperimentContainer {
     pub runs: Vec<ExperimentRun<u64>>,
-    pub command: Commands,
+    pub args: SparseArrayArgs,
 }
 
 impl ExperimentContainer {
-    pub fn new(command: Commands) -> Self {
+    pub fn new(args: SparseArrayArgs) -> Self {
         Self {
-            command,
+            args,
             runs: Vec::new(),
         }
     }
 
     pub fn get_query_mode(&self) -> &SparseQueryMode {
-        match &self.command {
-            Commands::Sparsity(values) => &values.query_mode,
-            Commands::Length(values) => &values.query_mode,
+        match &self.args.command {
+            SparseArrayCommands::Sparsity(values) => &values.query_mode,
+            SparseArrayCommands::Length(values) => &values.query_mode,
         }
     }
 
     pub fn get_query_size(&self) -> u64 {
-        match &self.command {
-            Commands::Sparsity(values) => values.query_size,
-            Commands::Length(values) => values.query_size,
+        match &self.args.command {
+            SparseArrayCommands::Sparsity(values) => values.query_size,
+            SparseArrayCommands::Length(values) => values.query_size,
         }
     }
 
     pub fn get_outfile(&self) -> &PathBuf {
-        match &self.command {
-            Commands::Sparsity(values) => &values.outfile,
-            Commands::Length(values) => &values.outfile,
-        }
+        &self.args.outfile
     }
 
     pub fn run(&mut self, rng: &mut StdRng) {
@@ -57,11 +54,11 @@ impl Experiment for ExperimentContainer {
     type I = StepBy<RangeInclusive<u64>>;
 
     fn iter_params(&self) -> Self::I {
-        match &self.command {
-            Commands::Sparsity(value) => {
+        match &self.args.command {
+            SparseArrayCommands::Sparsity(value) => {
                 (value.min_sparsity as u64..=value.max_sparsity as u64).step_by(value.step_size)
             }
-            Commands::Length(value) => {
+            SparseArrayCommands::Length(value) => {
                 (value.min_length..=value.max_length).step_by(value.step_size)
             }
         }
@@ -73,9 +70,9 @@ impl Experiment for ExperimentContainer {
 
     fn setup(&self, rng: &mut rand::rngs::StdRng, param: &Self::Param) -> Self::Resource {
         println!("Setting up run with parameter: {param}");
-        let (sparsity, length) = match &self.command {
-            Commands::Sparsity(value) => (*param as u8, value.length),
-            Commands::Length(value) => (value.sparsity, *param),
+        let (sparsity, length) = match &self.args.command {
+            SparseArrayCommands::Sparsity(value) => (*param as u8, value.length),
+            SparseArrayCommands::Length(value) => (value.sparsity, *param),
         };
         let mut builder = SparseArray::create(length);
         let distribution = Uniform::<u8>::new(0, 100);
@@ -131,8 +128,8 @@ impl Experiment for ExperimentContainer {
 }
 
 pub fn main() -> Result<()> {
-    let args = SparseArrayCli::parse();
-    let mut experiment = ExperimentContainer::new(args.command);
+    let args = SparseArrayArgs::parse();
+    let mut experiment = ExperimentContainer::new(args);
     let mut rng = StdRng::seed_from_u64(42);
     experiment.run(&mut rng);
     experiment.save(experiment.get_outfile())?;

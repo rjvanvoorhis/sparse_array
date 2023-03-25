@@ -21,11 +21,11 @@ impl SelectSupport {
     }
 
     /// Return the **first** position "j" in the underlying bitvector such that rank1(j) = value
-    /// 
+    ///
     /// ```
     /// use sparse_array::{select_support::SelectSupport, rank_support::RankSupport};
     /// use sucds::{BitVector};
-    /// 
+    ///
     /// let store = BitVector::from_bits(vec![false, true, true, false, true, false]);
     /// let rs = RankSupport::new_from_owned(store);
     /// let s = SelectSupport::new_from_owned(rs);
