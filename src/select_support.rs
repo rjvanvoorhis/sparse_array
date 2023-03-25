@@ -20,6 +20,20 @@ impl SelectSupport {
         }
     }
 
+    /// Return the **first** position "j" in the underlying bitvector such that rank1(j) = value
+    /// 
+    /// ```
+    /// use sparse_array::{select_support::SelectSupport, rank_support::RankSupport};
+    /// use sucds::{BitVector};
+    /// 
+    /// let store = BitVector::from_bits(vec![false, true, true, false, true, false]);
+    /// let rs = RankSupport::new_from_owned(store);
+    /// let s = SelectSupport::new_from_owned(rs);
+    /// assert_eq!(0, s.select1(0));
+    /// assert_eq!(2, s.select1(1));
+    /// assert_eq!(3, s.select1(2));
+    /// assert_eq!(5, s.select1(3));
+    /// ```
     pub fn select1(&self, value: u64) -> u64 {
         bisect_left(0, self.rank_support.store.len() as u64, |x| {
             self.rank_support.rank1(x).cmp(&value)
