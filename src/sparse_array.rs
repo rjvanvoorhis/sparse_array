@@ -13,7 +13,6 @@ use crate::{rank_support::RankSupport, select_support::SelectSupport};
 #[derive(Debug, Clone)]
 pub struct SparseArray<T> {
     vector: Vec<T>,
-    // store: Rc<BitVector>,
     rank_support: Rc<RankSupport>,
     select_support: Rc<SelectSupport>,
 }
@@ -66,22 +65,27 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArrayBuilder<T> {
         let rank_support = Rc::new(inner_rank_support);
         let inner_select_support = SelectSupport::new(Rc::clone(&rank_support));
         let select_support = Rc::new(inner_select_support);
-        return SparseArray {
+        SparseArray {
             vector: self.vector,
             rank_support,
             select_support,
-        };
+        }
     }
 }
 
 impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
-    pub fn new(size: u64) -> SparseArrayBuilder<T> {
+    // Generate a static SparseArray from parts
+    pub fn new(vector: Vec<T>, store: BitVector) -> Self {
+        SparseArrayBuilder { vector, store }.finalize()
+    }
+
+    // Create an empty SparseArrayBuilder which elements can be added to
+    pub fn create(size: u64) -> SparseArrayBuilder<T> {
         SparseArrayBuilder::new(size)
     }
 
-    /// An alias for new
-    pub fn create(size: u64) -> SparseArrayBuilder<T> {
-        Self::new(size)
+    pub fn overhead(&self) -> u64 {
+        self.rank_support.overhead()
     }
 
     /// create a sparse array from a dense vector
@@ -96,10 +100,7 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
     /// assert_eq!(from_dense, from_sparse);
     /// assert_eq!(sparse.get_at_index(1), None);
     /// ```
-    pub fn from_dense<I>(values: I) -> Self
-    where
-        I: IntoIterator<Item = Option<T>> + ExactSizeIterator,
-    {
+    pub fn from_dense_vec(values: Vec<Option<T>>) -> Self {
         let mut builder = Self::create(values.len() as u64);
         values.into_iter().enumerate().for_each(|(pos, value)| {
             match value {
@@ -110,6 +111,25 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
             };
         });
         builder.finalize()
+    }
+
+    /// create a sparse array from an iterable of optional values
+    ///
+    /// ```
+    /// # use sparse_array::sparse_array::*;
+    /// let some_if_even = |x: u32| {if x % 2 == 0 {Some(x)} else {None}};
+    /// let values = (0..=10_u32).map(some_if_even);
+    /// let sparse = SparseArray::from_dense(values);
+    /// assert_eq!(0, *sparse.get_at_index(0).unwrap());
+    /// assert_eq!(None, sparse.get_at_index(1));
+    /// assert_eq!(2, *sparse.get_at_index(2).unwrap());
+    /// ```
+    pub fn from_dense<I>(values: I) -> Self
+    where
+        I: IntoIterator<Item = Option<T>>,
+    {
+        let values: Vec<Option<T>> = values.into_iter().collect();
+        Self::from_dense_vec(values)
     }
 
     /// Returns the total number elements in the dense representation of the array
@@ -143,25 +163,44 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
     }
 
     pub fn get_at_index(&self, index: u64) -> Option<&T> {
+        if index >= self.size() {
+            return None;
+        }
         match self.rank_support.store.get_bit(index as usize) {
             true => self.get_at_rank(self.rank_support.rank1(index)),
             false => None,
         }
     }
 
+    /// Given a target rank return the index of the element in the sparse array where the rankth element occurs
+    ///
+    /// If rank > num_elem() returns None
+    ///
+    /// ```
+    /// # use sparse_array::sparse_array::*;
+    /// let sparse = SparseArray::from_dense(vec![None, Some(0), Some(1), None, None, Some(2)]);
+    /// assert_eq!(None, sparse.get_index_of(0));
+    /// assert_eq!(1, sparse.get_index_of(1).unwrap());
+    /// assert_eq!(2, sparse.get_index_of(2).unwrap());
+    /// assert_eq!(5, sparse.get_index_of(3).unwrap());
+    /// ```
     pub fn get_index_of(&self, rank: u64) -> Option<u64> {
-        if rank > self.num_elem() {
-            None
-        } else {
-            Some(self.select_support.select1(rank) - 1)
+        let num_elem = self.num_elem();
+        if rank > num_elem || rank == 0 {
+            return None;
         }
+        if rank == 0 {
+            return Some(0);
+        }
+
+        Some(self.select_support.select1(rank) - 1)
     }
 
     pub fn load(fname: &str) -> Result<Self> {
         let file = File::open(fname)?;
         let reader = BufReader::new(file);
         let interim_sparse_array: InterimSparseArray<T> = bincode::deserialize_from(reader)?;
-        Ok(interim_sparse_array.try_into()?)
+        interim_sparse_array.try_into()
     }
 
     pub fn save(&self, fname: &str) -> Result<()> {
@@ -186,5 +225,80 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
         bincode::serialize_into(&mut writer, &interim_sparse_array)
             .wrap_err("Failed to serialize sparse array")?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, SeedableRng};
+
+    #[test]
+    fn test_from_dense_vec() {
+        let distribution = Uniform::new_inclusive(0, 100_u8);
+        let mut rng = StdRng::seed_from_u64(42);
+        let dense: Vec<Option<u32>> = distribution
+            .sample_iter(&mut rng)
+            .take(10000)
+            .enumerate()
+            .map(
+                |(index, roll)| {
+                    if roll < 15 {
+                        Some(index as u32)
+                    } else {
+                        None
+                    }
+                },
+            )
+            .collect();
+        let sparse = SparseArray::<u32>::from_dense(dense.clone());
+        dense
+            .into_iter()
+            .enumerate()
+            .for_each(|(index, value)| match value {
+                None => assert_eq!(None, sparse.get_at_index(index as u64)),
+                Some(inner) => {
+                    assert_eq!(inner, sparse.get_at_index(index as u64).unwrap().to_owned())
+                }
+            })
+    }
+
+    #[test]
+    fn test_get_index_of() {
+        let length = 10000_u64;
+        for sparsity in (0..=100_u8).step_by(5) {
+            let mut rng = StdRng::seed_from_u64(42);
+            let distibution = Uniform::new_inclusive(0, 100_u8);
+            let mut sparse = SparseArray::<u64>::create(length);
+            let mut expected_positions = Vec::<u64>::new();
+            distibution
+                .sample_iter(&mut rng)
+                .take(length as usize)
+                .enumerate()
+                .filter_map(|pair| {
+                    if pair.1 < sparsity {
+                        Some(pair.0 as u64)
+                    } else {
+                        None
+                    }
+                })
+                .for_each(|pos| {
+                    sparse.append(pos, pos);
+                    expected_positions.push(pos);
+                });
+            let sparse = sparse.finalize();
+            assert_eq!(
+                None,
+                sparse.get_index_of(expected_positions.len() as u64 + 1)
+            );
+            expected_positions.into_iter().enumerate().for_each(
+                |(rank_minus_1, expected_position)| {
+                    assert_eq!(
+                        expected_position,
+                        sparse.get_index_of(rank_minus_1 as u64 + 1).unwrap()
+                    );
+                },
+            );
+        }
     }
 }

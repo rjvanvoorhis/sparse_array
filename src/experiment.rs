@@ -1,68 +1,60 @@
-use eyre::{Result, WrapErr};
-use rand::{
-    distributions::{Bernoulli, Uniform},
-    rngs::StdRng,
-    Rng,
-};
-use serde::Serialize;
 use std::{
     fs::File,
     io::{BufWriter, Write},
-    path::{Path, PathBuf},
+    iter::StepBy,
+    path::Path,
     time::{Duration, Instant},
 };
-use sucds::BitVector;
 
-#[derive(Serialize)]
-pub struct Iteration {
-    p: u64,
+use eyre::{Context, Result};
+use rand::rngs::StdRng;
+use serde::Serialize;
+
+#[derive(Serialize, Debug)]
+pub struct ExperimentRun<P> {
     overhead: u64,
-    query_time: Duration,
-    setup_time: Duration,
+    parameter: P,
+    setup_duration: Duration,
+    query_duration: Duration,
 }
 
-#[derive(Serialize)]
-pub struct Params {
-    pub start: u64,
-    pub stop: u64,
-    pub step_size: u64,
+#[derive(Serialize, Debug)]
+pub struct ExperimentParams {
     pub query_size: u64,
+    pub min_size: u64,
+    pub max_size: u64,
+    pub step_size: usize,
+}
+
+impl ExperimentParams {
+    pub fn new(query_size: u64, min_size: u64, max_size: u64, step_size: usize) -> Self {
+        Self {
+            query_size,
+            min_size,
+            max_size,
+            step_size,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a ExperimentParams {
+    type Item = u64;
+    type IntoIter = StepBy<std::ops::RangeInclusive<u64>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (self.min_size..=self.max_size).step_by(self.step_size)
+    }
 }
 
 pub trait Experiment: Serialize {
     type Resource;
+    type Param;
+    type I: Iterator<Item = Self::Param>;
 
-    fn setup(&self, rng: &mut StdRng, p: u64) -> Self::Resource;
-    fn get_params(&self) -> &Params;
+    fn setup(&self, rng: &mut StdRng, param: &Self::Param) -> Self::Resource;
     fn get_overhead(&self, resource: &Self::Resource) -> u64;
-    fn execute_query(&self, resource: &Self::Resource, p: u64) -> Duration;
-
-    fn get_iterations(&self, rng: &mut StdRng) -> Vec<Iteration> {
-        let params = self.get_params();
-        (params.start..=params.stop)
-            .step_by(params.step_size as usize)
-            .map(|p| {
-                let now = Instant::now();
-                let resource = self.setup(rng, p);
-                let setup_time = now.elapsed();
-                let overhead = self.get_overhead(&resource);
-                let query_dist = Uniform::new_inclusive(0, p);
-                let mut query_time = Duration::default();
-                rng.sample_iter(query_dist)
-                    .take(params.query_size as usize)
-                    .for_each(|x| {
-                        query_time += self.execute_query(&resource, x);
-                    });
-                Iteration {
-                    p,
-                    overhead,
-                    query_time,
-                    setup_time,
-                }
-            })
-            .collect()
-    }
-
+    fn iter_params(&self) -> Self::I;
+    fn execute_queries(&self, rng: &mut StdRng, resource: &Self::Resource) -> Duration;
     fn save<S: AsRef<Path>>(&self, fname: S) -> Result<()> {
         let file = File::create(fname).wrap_err("could not create experiment output file")?;
         let mut writer = BufWriter::new(file);
@@ -73,21 +65,23 @@ pub trait Experiment: Serialize {
         )?;
         Ok(())
     }
-
-    fn push_iteration(&mut self, iteration: Iteration);
-
-    fn run(&mut self, rng: &mut StdRng) {
-        self.get_iterations(rng)
-            .into_iter()
-            .for_each(|iteration| self.push_iteration(iteration))
+    fn execute_run(&self, rng: &mut StdRng, parameter: Self::Param) -> ExperimentRun<Self::Param> {
+        let now = Instant::now();
+        let resource = self.setup(rng, &parameter);
+        let setup_duration = now.elapsed();
+        let overhead = self.get_overhead(&resource);
+        let query_duration = self.execute_queries(rng, &resource);
+        ExperimentRun {
+            overhead,
+            parameter,
+            setup_duration,
+            query_duration,
+        }
     }
-}
 
-pub fn generate_bitvector_of_size(size: u64, rng: &mut StdRng) -> BitVector {
-    let distribution = Bernoulli::new(0.5).unwrap();
-    BitVector::from_bits(
-        rng.sample_iter(&distribution)
-            .take(size as usize)
-            .collect::<Vec<bool>>(),
-    )
+    fn create_runs(&self, rng: &mut StdRng) -> Vec<ExperimentRun<Self::Param>> {
+        self.iter_params()
+            .map(|p| self.execute_run(rng, p))
+            .collect()
+    }
 }

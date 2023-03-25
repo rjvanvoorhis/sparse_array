@@ -27,13 +27,13 @@ impl TryFrom<RankSupport> for SaveableRankSupport {
         let superblocks = into_bytes(value.superblocks)?;
         let blocks = into_bytes(value.blocks)?;
         let store = to_bytes(value.store.as_ref())?;
-        return Ok(Self {
+        Ok(Self {
             store,
             superblocks,
             blocks,
             b: value.b,
             s: value.s,
-        });
+        })
     }
 }
 
@@ -147,7 +147,7 @@ impl RankSupport {
 
     pub fn into_bytes(self) -> Result<Vec<u8>> {
         let saveable: SaveableRankSupport = self.try_into()?;
-        Ok(bincode::serialize(&saveable).wrap_err("Failed to serialize rank support")?)
+        bincode::serialize(&saveable).wrap_err("Failed to serialize rank support")
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
@@ -155,7 +155,7 @@ impl RankSupport {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        Ok(bincode::deserialize(bytes).wrap_err("Failed to deserialize rank_support")?)
+        bincode::deserialize(bytes).wrap_err("Failed to deserialize rank_support")
     }
 
     pub fn overhead(&self) -> u64 {
@@ -166,7 +166,7 @@ impl RankSupport {
     }
 
     pub fn save(&self, fname: &str) -> Result<()> {
-        let file = File::create(&fname).wrap_err(format!("Failed to create file {fname}"))?;
+        let file = File::create(fname).wrap_err(format!("Failed to create file {fname}"))?;
         let mut writer = BufWriter::new(file);
         let clone: SaveableRankSupport = self.clone().try_into()?;
         bincode::serialize_into(&mut writer, &clone)?;
