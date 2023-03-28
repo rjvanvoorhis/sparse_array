@@ -1,4 +1,4 @@
-use std::{iter::StepBy, path::PathBuf, time::Instant};
+use std::{iter::StepBy, mem, path::PathBuf, rc::Rc, time::Instant};
 
 use clap::Parser;
 use eyre::{Context, Result};
@@ -9,8 +9,7 @@ use rand::{
 };
 use serde::Serialize;
 use sparse_array::{
-    cli::{RankArgs, RankSelectArgs, RankSelectCommands, SelectArgs},
-    // cli::{RankSupportArgs, QueryMode},
+    cli::{BlockSize, RankArgs, RankSelectArgs, RankSelectCommands, SelectArgs},
     experiment::{Experiment, ExperimentRun},
     rank_support::RankSupport,
     select_support::SelectSupport,
@@ -26,10 +25,11 @@ pub fn generate_bitvector_of_size(size: u64, rng: &mut StdRng) -> BitVector {
     )
 }
 
+const WORD_SIZE: usize = mem::size_of::<usize>();
+
 #[derive(Serialize)]
 pub struct RankExperiment {
     params: RankArgs,
-    // params: ExperimentParams,
     runs: Vec<ExperimentRun<u64>>,
     outfile: PathBuf,
 }
@@ -72,7 +72,10 @@ impl Experiment for RankExperiment {
 
     fn setup(&self, rng: &mut rand::rngs::StdRng, param: &Self::Param) -> Self::Resource {
         let store = generate_bitvector_of_size(*param, rng);
-        RankSupport::new_from_owned(store)
+        match self.params.block_size {
+            BlockSize::Dynamic => RankSupport::new_from_owned(store),
+            BlockSize::Fixed => RankSupport::with_block_size(WORD_SIZE as u64, Rc::new(store)),
+        }
     }
 
     fn get_overhead(&self, resource: &Self::Resource) -> u64 {
@@ -173,7 +176,8 @@ impl RankSupportExperiment {
 pub fn main() -> Result<()> {
     let args = RankSelectArgs::parse();
     let mut experiment = RankSupportExperiment::new(args);
-    let mut rng = StdRng::seed_from_u64(42);
+    // let mut rng = StdRng::seed_from_u64(42);
+    let mut rng = StdRng::from_entropy();
     experiment.run(&mut rng);
     experiment.save()?;
     Ok(())

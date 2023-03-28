@@ -15,6 +15,12 @@ pub enum RankSelectCommands {
     Select(SelectArgs),
 }
 
+#[derive(ValueEnum, Debug, Clone, Serialize)]
+pub enum BlockSize {
+    Dynamic,
+    Fixed,
+}
+
 #[derive(Parser, Debug, Serialize)]
 pub struct RankSelectArgs {
     #[command(subcommand)]
@@ -38,6 +44,9 @@ pub struct RankArgs {
 
     #[arg(short, long, default_value = "100")]
     pub query_size: u64,
+
+    #[arg(short, long, default_value = "dynamic", value_enum)]
+    pub block_size: BlockSize,
 }
 
 #[derive(Args, Debug, Clone, Serialize)]
@@ -55,6 +64,9 @@ pub struct SelectArgs {
 
     #[arg(short, long, default_value = "100")]
     pub query_size: u64,
+
+    #[arg(short, long, default_value = "dynamic", value_enum)]
+    pub block_size: BlockSize,
 }
 
 #[derive(ValueEnum, Clone, Debug, Serialize)]

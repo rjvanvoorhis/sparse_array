@@ -69,7 +69,6 @@ impl Experiment for ExperimentContainer {
     }
 
     fn setup(&self, rng: &mut rand::rngs::StdRng, param: &Self::Param) -> Self::Resource {
-        println!("Setting up run with parameter: {param}");
         let (sparsity, length) = match &self.args.command {
             SparseArrayCommands::Sparsity(value) => (*param as u8, value.length),
             SparseArrayCommands::Length(value) => (value.sparsity, *param),

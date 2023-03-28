@@ -6,7 +6,7 @@ use std::{
 
 use eyre::{Context, Result};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sucds::BitVector;
+use sucds::{BitVector, Searial};
 
 use crate::{rank_support::RankSupport, select_support::SelectSupport};
 
@@ -85,6 +85,7 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
     }
 
     pub fn overhead(&self) -> u64 {
+        (self.rank_support.store.size_in_bytes() as u64 * 8) + 
         self.rank_support.overhead()
     }
 
@@ -232,6 +233,19 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
 mod tests {
     use super::*;
     use rand::{distributions::Uniform, prelude::Distribution, rngs::StdRng, SeedableRng};
+
+    #[test]
+    fn test_save_load(){
+        let sa = SparseArray::<u32>::from_dense_vec(vec![None, Some(1), None, Some(2), Some(3)]);
+        assert_eq!(*sa.get_at_index(1).unwrap(), 1);
+        assert_eq!(sa.get_index_of(1).unwrap(), 1);
+        assert_eq!(sa.num_elem_at(1), 1);
+        sa.save("tmp-file.bin").unwrap();
+        let loaded: SparseArray<u32> = SparseArray::load("tmp-file.bin").unwrap();
+        assert_eq!(*loaded.get_at_index(1).unwrap(), 1);
+        assert_eq!(loaded.get_index_of(1).unwrap(), 1);
+        assert_eq!(loaded.num_elem_at(1), 1);
+    }
 
     #[test]
     fn test_from_dense_vec() {

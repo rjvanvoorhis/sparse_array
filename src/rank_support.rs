@@ -10,6 +10,7 @@ use std::{
     io::{BufReader, BufWriter},
     rc::Rc,
 };
+use std::mem::size_of;
 use sucds::{BitVector, CompactVector, Searial};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,7 +72,8 @@ impl RankSupport {
         let log2_n = max(log2_ceil(n), 1);
         let log2_n_squared = log2_n * log2_n;
 
-        let blocks_per_superblock = ceil_div(ceil_div(log2_n_squared, 2), block_size);
+        //let blocks_per_superblock = ceil_div(ceil_div(log2_n_squared, 2), block_size);
+        let blocks_per_superblock = ceil_div(log2_n_squared, block_size);
         let superblock_size = block_size * blocks_per_superblock;
 
         // not using ceil_div here because we want there to always be one more superblock than we need
@@ -158,11 +160,14 @@ impl RankSupport {
         bincode::deserialize(bytes).wrap_err("Failed to deserialize rank_support")
     }
 
+    /// The size in bits required to support constant time rank queries
     pub fn overhead(&self) -> u64 {
         (self.blocks.size_in_bytes()
             + self.superblocks.size_in_bytes()
             + self.s.size_in_bytes()
-            + self.b.size_in_bytes()) as u64
+            + self.b.size_in_bytes()
+            + size_of::<Rc<BitVector>> as usize
+        ) as u64 * 8
     }
 
     pub fn save(&self, fname: &str) -> Result<()> {
@@ -184,6 +189,7 @@ impl RankSupport {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::{distributions::Bernoulli, prelude::Distribution, rngs::StdRng, SeedableRng};
     use sucds::BitVector;
 
     #[test]
@@ -225,5 +231,34 @@ mod tests {
         let rs = RankSupport::new_from_owned(bv);
         assert_eq!(1, rs.rank1(3));
         assert_eq!(2, rs.rank1(4));
+    }
+
+    #[test]
+    fn test_various_sizes() {
+        let mut rng = StdRng::from_entropy();
+        let distribution = Bernoulli::new(0.5).unwrap();
+        (10_000..10_128_u64).for_each(|size| {
+            let bits = distribution
+                .sample_iter(&mut rng)
+                .take(size as usize)
+                .collect::<Vec<bool>>();
+            let mut expected_ranks = Vec::<u64>::with_capacity(size as usize);
+            let mut counter = 0_u64;
+            bits.iter().for_each(|&value| {
+                expected_ranks.push(*&counter);
+                if value {
+                    counter += 1
+                }
+            });
+            expected_ranks.push(counter);
+            let rs = RankSupport::new_from_owned(BitVector::from_bits(bits));
+            expected_ranks
+                .into_iter()
+                .enumerate()
+                .for_each(|(pos, rank)| {
+                    let result = rs.rank1(pos as u64);
+                    assert_eq!(result, rank);
+                })
+        })
     }
 }
