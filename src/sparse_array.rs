@@ -86,7 +86,7 @@ impl<T: Serialize + Clone + DeserializeOwned> SparseArray<T> {
 
     pub fn overhead(&self) -> u64 {
         (self.rank_support.store.size_in_bytes() as u64 * 8) + 
-        self.rank_support.overhead()
+        self.select_support.overhead() + 64
     }
 
     /// create a sparse array from a dense vector

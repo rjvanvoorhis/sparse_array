@@ -116,7 +116,7 @@ if __name__ == "__main__":
         runs = combine_runs(runs)
         unit = UNIT_DICT[y] if unit is None else unit
         ylabel = f"{NAME_DICT[y]} ({unit})"
-        runs["overhead"] *= 8
+        runs["overhead"]
         runs["overhead_ratio"] = runs["overhead"] / runs["parameter"]
         ylim = [low, high] if (low is not None and high is not None) else None
         fig = runs.plot(
@@ -129,11 +129,3 @@ if __name__ == "__main__":
         fig.savefig(outfile)
 
     main()
-
-    # run_folder = "runs/rank-support-dynamic-block-size-wide"
-    # results = collect_results(run_folder)
-    # runs = extract_runs(results)
-    # runs = combine_runs(runs)
-    # runs["ratio"] = runs["overhead"] / runs["parameter"]
-    # fig = runs.plot(x="parameter", y="ratio").get_figure()
-    # fig.savefig("test.png")

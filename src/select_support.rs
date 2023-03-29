@@ -46,9 +46,8 @@ impl SelectSupport {
         })
     }
 
-    pub fn overhead(&self) -> u64 {
-        std::mem::size_of::<Rc<RankSupport>>() as u64 + 
-        self.rank_support.overhead()
+    pub fn overhead(&self) -> u64 { 
+        self.rank_support.overhead() + 64
     }
 
     pub fn save(&self, fname: &str) -> Result<()> {
@@ -56,8 +55,27 @@ impl SelectSupport {
         Ok(())
     }
 
-    pub fn load(&self, fname: &str) -> Result<Self> {
+    pub fn load(fname: &str) -> Result<Self> {
         let rank_support = RankSupport::load(fname)?;
         Ok(Self::new_from_owned(rank_support))
+    }
+    
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sucds::BitVector;
+
+    #[test]
+    fn test_save_load() {
+        let bv = BitVector::from_bits([true, false, true]);
+        let rs = RankSupport::new_from_owned(bv);
+        let s = SelectSupport::new_from_owned(rs);
+        s.save("select.bin").unwrap();
+        let s_loaded = SelectSupport::load("select.bin").unwrap();
+        assert_eq!(s_loaded.select1(1), 1);
+        assert_eq!(s_loaded.select0(1), 2);
     }
 }

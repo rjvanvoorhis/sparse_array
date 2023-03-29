@@ -166,7 +166,7 @@ impl RankSupport {
             + self.superblocks.size_in_bytes()
             + self.s.size_in_bytes()
             + self.b.size_in_bytes()
-            + size_of::<Rc<BitVector>> as usize
+            + 8
         ) as u64 * 8
     }
 
@@ -191,6 +191,15 @@ mod tests {
     use super::*;
     use rand::{distributions::Bernoulli, prelude::Distribution, rngs::StdRng, SeedableRng};
     use sucds::BitVector;
+
+    #[test]
+    fn test_save_load() {
+        let bv = BitVector::from_bits([true, false, true]);
+        let rs = RankSupport::new_from_owned(bv);
+        rs.save("tmp.bin").unwrap();
+        let rs_loaded: RankSupport = RankSupport::load("tmp.bin").unwrap();
+        assert_eq!(rs_loaded.rank1(1), 1);
+    }
 
     #[test]
     fn test_small_bitvectors() {
