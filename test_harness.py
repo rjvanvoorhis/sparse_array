@@ -27,6 +27,7 @@ def run_command(
     if logfile is None:
         return subprocess.run(cmd, **kwargs)
 
+    pathlib.Path(logfile).parent.mkdir(exist_ok=True, parents=True)
     with open(str(logfile), "wb") as f:
         kwargs["stdout"] = f
         return subprocess.run(cmd, **kwargs)
@@ -147,28 +148,27 @@ if __name__ == "__main__":
         r = average_runs(runs=kwargs["runs"])
         run_kwargs = {k: v for k, v in kwargs.items() if k in ["query_size", "max_size", "step_size"]}
         for experiment in ["rank", "select"]:
-        # for experiment in ["rank", "select"]:
-            # for block_size in ["dynamic", "fixed"]:
-            for block_size in ["dynamic"]:
+            for block_size in ["dynamic", "fixed"]:
+            # for block_size in ["dynamic"]:
                 r(run_rank_select_experiment)(
-                    f"runs/{experiment}-support-{block_size}-block-size-wide.json",
+                    f"runs/{experiment}-support-{block_size}-block-size.json",
                     experiment,
                     block_size=block_size,
                     **run_kwargs,
                 )
-        # for vary_by in ["length", "sparsity"]:
-        #     for query_mode in ["num-elem-at", "get-at-index", "get-index-of"]:
-        #         min_value, max_value, step_size, fixed = PARAMETER_RANGES[vary_by]
-        #         outfile = f"runs/sparse-array-{query_mode}-vary-by-{vary_by}.json"
-        #         r(run_sparsity_experiment)(
-        #             outfile,
-        #             vary_by,
-        #             query_mode,
-        #             fixed,
-        #             min_size=min_value,
-        #             max_size=max_value,
-        #             step_size=step_size,
-        #             **run_kwargs,
-        #         )
+        for vary_by in ["length", "sparsity"]:
+            for query_mode in ["get-at-index", "get-index-of"]:
+                min_value, max_value, step_size, fixed = PARAMETER_RANGES[vary_by]
+                outfile = f"runs/sparse-array-{query_mode}-vary-by-{vary_by}.json"
+                r(run_sparsity_experiment)(
+                    outfile,
+                    vary_by,
+                    query_mode,
+                    fixed,
+                    min_size=min_value,
+                    max_size=max_value,
+                    step_size=step_size,
+                    **run_kwargs,
+                )
 
     main()
